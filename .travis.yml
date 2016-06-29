@@ -9,7 +9,7 @@ go:
   - 1.5
   - 1.4
   
-script: go test
+script: make && go test
 
 # GOMAXPROCS=1 forces scheduling race bugs.
 env:
