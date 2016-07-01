@@ -1,30 +1,13 @@
 language: go
-
 go_import_path: github.com/google/mtail
-
-# Run tests at these Go versions.
 go:
-  - tip
-  - 1.6
-  - 1.5
-  - 1.4
-  
+- 1.6
 script: make && go test
-
-# GOMAXPROCS=1 forces scheduling race bugs.
-env:
-  - GOMAXPROCS=1
-  - GOMAXPROCS=2
-  - GOMAXPROCS=4
-
-# Allow tip to fail, and only wait for mature versions to succeed before
-# reporting build status.
-matrix:
-  fast_finish: true
-  allow_failures:
-    - go: tip
-    - go: 1.6
-
-
-# Not using sudo, can use containers.
 sudo: false
+deploy:
+  provider: releases
+  api_key:
+    secure: M3nVdfPEQOrfwH1HEQpm818Z6oKNsVS0k7J153OCNdgFBbJqTJVIEFeGajrSqjANY4hCkfjNoMMrdqLIQslKBudf5wLirDwKShXdhgcrXEafex+vEmfGiDA3dRXvSCEoKW3czPFCIu1p6HBR28Jsql/CprBsUlQHVmbeims3qgcUm+FiGciDWJDpVgftLh4hPTvzvUD+2Jx1vaZmpyvsPRt50znm8k/nzdkd43ZG3MVazyNk2blJb4hCzPfsaqLdFCrlNJ24a99x4KP/sl6mEXzj3WUq/MCyWrsn2sUx1LdYNEkZAlfDPZ0FEkJMloGbXJ6ydAtmTj8i6UlYBecF5DeUEq60SzkgHrgDSE/fydVB2QM+ChQKE3BfSomSJj5/kRQWxj1uA/CfT3FksPqwU4x3fLZUs/BKbpgQbDMNJrfWlZog8tzCrNYa+/pUYUWEyKeiGB56VF3BiAt3x2yeRBad/g+pWUUUjqD/0hd7ySJN4ZRWwdCjE2Kibqe3coiPcAoRrRSrBxgxyFkf8/S1PcRm2yCjWlC2OoSRH4WOhzJmSMv4xielajJqts5iPK+1duDNju6TwQKx0fyL0ijtQX53ySlY2oyS3penNNbxfvKl86WTtbPcS3iZUUQWnBPPZSRDQad637LF/65C+PGVhsbRS6SADunb5c0k4bS3Jyo=
+  file: mtail.bin
+  on:
+    repo: jarro2783/mtail
