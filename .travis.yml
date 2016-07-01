@@ -14,9 +14,9 @@ deploy:
   skip_cleanup: true
   file_glob: true
   file: 
-    - bin/*/*.zip
-    - bin/*/*.gz
-    - bin/*/*.deb
+    - bin/$TRAVIS_TAG/*.zip
+    - bin/$TRAVIS_TAG/*.gz
+    - bin/$TRAVIS_TAG/*.deb
   on:
     tags: true
     repo: jarro2783/mtail
