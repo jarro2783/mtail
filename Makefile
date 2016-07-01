@@ -55,8 +55,7 @@ all: mtail
 .PHONY: mtail
 mtail: $(GOFILES) install_deps
 	mkdir bin
-	go build -o bin/mtail-x86_64
-	go install
+	goxc -d=./bin -pv=$${TRAVIS_TAG}
 
 vm/parser.go: vm/parser.y
 	cd vm && go generate
