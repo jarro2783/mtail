@@ -55,7 +55,7 @@ all: mtail
 .PHONY: mtail
 mtail: $(GOFILES) install_deps
 	mkdir bin
-	goxc -d=./bin -pv=$${TRAVIS_TAG}
+	goxc -d=./bin -pv=$${TRAVIS_TAG} -bc="linux darwin"
 
 vm/parser.go: vm/parser.y
 	cd vm && go generate
