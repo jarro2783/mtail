@@ -54,7 +54,8 @@ all: mtail
 
 .PHONY: mtail
 mtail: $(GOFILES) install_deps
-	go build -o mtail.bin
+	mkdir bin
+	go build -o bin/mtail-x86_64
 	go install
 
 vm/parser.go: vm/parser.y
