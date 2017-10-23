@@ -8,35 +8,40 @@ import (
 	"fmt"
 	"io"
 	"strconv"
-
-	"github.com/google/mtail/metrics"
 )
+
+func Parse(name string, input io.Reader) (astNode, error) {
+	p := newParser(name, input)
+	r := mtailParse(p)
+	if r != 0 || p == nil || p.errors != nil {
+		return nil, p.errors
+	}
+	return p.root, nil
+}
 
 const EOF = 0
 
 type parser struct {
 	name   string
-	root   node
+	root   astNode
 	errors ErrorList
 	l      *lexer
-	t      token    // Most recently lexed token.
-	pos    position // Maybe contains the position of the start of a node.
-	s      *scope
+	t      token             // Most recently lexed token.
+	pos    position          // Maybe contains the position of the start of a node when the parser is doing preprocessor concatenation.
+	endPos position          // Maybe contains the position of the end of a node when the parser is doing preprocessor concatenation.
 	res    map[string]string // Mapping of regex constants to patterns.
-	ms     *metrics.Store    // List of metrics exported by this program.
 }
 
-func newParser(name string, input io.Reader, ms *metrics.Store) *parser {
-	mtailDebug = *mtailDebugFlag
-	return &parser{name: name, l: newLexer(name, input), res: make(map[string]string), ms: ms}
+func newParser(name string, input io.Reader) *parser {
+	return &parser{name: name, l: newLexer(name, input), res: make(map[string]string)}
 }
 
-func (p *parser) ErrorP(s string, pos position) {
+func (p *parser) ErrorP(s string, pos *position) {
 	p.errors.Add(pos, s)
 }
 
 func (p *parser) Error(s string) {
-	p.errors.Add(p.t.pos, s)
+	p.errors.Add(&p.t.pos, s)
 }
 
 func (p *parser) Lex(lval *mtailSymType) int {
@@ -67,19 +72,10 @@ func (p *parser) Lex(lval *mtailSymType) int {
 	return int(p.t.kind)
 }
 
-func (p *parser) startScope() {
-	s := &scope{p.s, map[string][]*symbol{}}
-	p.s = s
-}
-
-func (p *parser) endScope() {
-	if p.s != nil && p.s.parent != nil {
-		p.s = p.s.parent
-	}
-}
-
 func (p *parser) inRegex() {
 	p.l.in_regex = true
 }
 
-var mtailDebugFlag = flag.Int("mtailDebug", 0, "Set parser debug level.")
+func init() {
+	flag.IntVar(&mtailDebug, "mtailDebug", 0, "Set parser debug level.")
+}

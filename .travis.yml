@@ -3,7 +3,7 @@ go_import_path: github.com/google/mtail
 before_install:
   - go get github.com/laher/goxc
 go:
-- 1.6
+  - tip
 script: make && go test
 sudo: false
 deploy:

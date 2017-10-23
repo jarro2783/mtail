@@ -14,11 +14,16 @@ import (
 	"testing"
 	"time"
 
-	"github.com/kylelemons/godebug/pretty"
+	"github.com/go-test/deep"
 )
+
+// This test requires disk access, and cannot be injected without internal
+// knowledge of the fsnotify code. Make the wait deadlines long.
+const deadline = 1 * time.Second
 
 func TestLogWatcher(t *testing.T) {
 	if testing.Short() {
+		// This test is slow due to disk access.
 		t.Skip("skipping log watcher test in short mode")
 	}
 
@@ -55,7 +60,7 @@ func TestLogWatcher(t *testing.T) {
 		default:
 			t.Errorf("Wrong event type: %q", e)
 		}
-	case <-time.After(10 * time.Millisecond):
+	case <-time.After(deadline):
 		t.Errorf("didn't receive create message before timeout")
 	}
 	f.WriteString("hi")
@@ -70,14 +75,14 @@ func TestLogWatcher(t *testing.T) {
 		default:
 			t.Errorf("Wrong event type: %q", e)
 		}
-	case <-time.After(10 * time.Millisecond):
+	case <-time.After(deadline):
 		t.Errorf("didn't receive update message before timeout")
 	}
 	os.Chmod(filepath.Join(workdir, "logfile"), os.ModePerm)
 	select {
 	case e := <-w.Events():
 		t.Errorf("no event expected, got %#v", e)
-	case <-time.After(10 * time.Millisecond):
+	case <-time.After(deadline):
 	}
 	os.Remove(filepath.Join(workdir, "logfile"))
 	select {
@@ -90,7 +95,7 @@ func TestLogWatcher(t *testing.T) {
 		default:
 			t.Errorf("Wrong event type: %q", e)
 		}
-	case <-time.After(10 * time.Millisecond):
+	case <-time.After(deadline):
 		t.Errorf("didn't receive delete message before timeout")
 	}
 }
@@ -114,7 +119,6 @@ func TestNewLogWatcherError(t *testing.T) {
 	if err == nil {
 		t.Errorf("didn't fail as expected")
 	}
-	//t.Logf("expected error: %s", err)
 	if err := syscall.Setrlimit(syscall.RLIMIT_NOFILE, &rLimit); err != nil {
 		t.Fatalf("couldn't reset rlimit: %s", err)
 	}
@@ -154,9 +158,8 @@ func TestLogWatcherAddError(t *testing.T) {
 	if err == nil {
 		t.Errorf("didn't fail to add file")
 	}
-	//t.Logf("error: %s", err)
 	if err := os.Chmod(filename, 0777); err != nil {
-		t.Fatalf("coulnd't reset file perms: %s", err)
+		t.Fatalf("couldn't reset file perms: %s", err)
 	}
 }
 
@@ -169,12 +172,12 @@ func TestWatcherErrors(t *testing.T) {
 	if err != nil {
 		t.Fatalf("couldn't create a watcher")
 	}
-	w.Errors <- errors.New("just a test, not really an error")
+	w.Errors <- errors.New("Injected error for test")
 	if err := w.Close(); err != nil {
 		t.Fatalf("watcher close failed: %q", err)
 	}
-	diff := pretty.Compare(strconv.FormatInt(orig+1, 10), expvar.Get("log_watcher_error_count").String())
-	if len(diff) > 0 {
+	diff := deep.Equal(strconv.FormatInt(orig+1, 10), expvar.Get("log_watcher_error_count").String())
+	if diff != nil {
 		t.Errorf("log watcher error count doens't match:\n%s", diff)
 	}
 }

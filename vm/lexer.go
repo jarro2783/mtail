@@ -60,6 +60,7 @@ var lexemeName = map[lexeme]string{
 	CONST:      "CONST",
 	OTHERWISE:  "OTHERWISE",
 	ELSE:       "ELSE",
+	DEL:        "DEL",
 }
 
 func (t lexeme) String() string {
@@ -76,6 +77,7 @@ var keywords = map[string]lexeme{
 	"const":     CONST,
 	"counter":   COUNTER,
 	"def":       DEF,
+	"del":       DEL,
 	"else":      ELSE,
 	"gauge":     GAUGE,
 	"hidden":    HIDDEN,
@@ -86,28 +88,13 @@ var keywords = map[string]lexeme{
 
 // List of builtin functions.  Keep this list sorted!
 var builtins = []string{
+	"getfilename",
 	"len",
 	"settime",
 	"strptime",
 	"strtol",
 	"timestamp",
 	"tolower",
-}
-
-// A position is the location in the source program that a token appears.
-type position struct {
-	filename string
-	line     int // Line in the source for this token.
-	startcol int // Starting and ending columns in the source for this token.
-	endcol   int
-}
-
-func (p position) String() string {
-	r := fmt.Sprintf("%s:%d:%d", p.filename, p.line+1, p.startcol+1)
-	if p.endcol > p.startcol {
-		r += fmt.Sprintf("-%d", p.endcol+1)
-	}
-	return r
 }
 
 // token describes a lexed token from the input, containing its type, the
@@ -465,17 +452,25 @@ Loop:
 // capture groups in the preceeding regular expression.
 func lexCapref(l *lexer) stateFn {
 	l.skip() // Skip the leading $
+	named := false
 Loop:
 	for {
 		switch r := l.next(); {
 		case isAlnum(r) || r == '_':
 			l.accept()
+			if !isDigit(r) {
+				named = true
+			}
 		default:
 			l.backup()
 			break Loop
 		}
 	}
-	l.emit(CAPREF)
+	if named {
+		l.emit(CAPREF_NAMED)
+	} else {
+		l.emit(CAPREF)
+	}
 	return lexProg
 }
 

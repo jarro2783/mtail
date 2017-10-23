@@ -3,45 +3,86 @@
 
 package vm
 
-type symtype int
+import (
+	"bytes"
+	"fmt"
+)
 
-// symtype enumerates the types of symbols found in the program text.
+type SymbolKind int
+
+// SymbolKind enumerates the kinds of symbols found in the program text.
 const (
-	IDSymbol     symtype = iota // Identifiers
-	CaprefSymbol                // Capture group references
-	DefSymbol                   // Definitions
+	VarSymbol    SymbolKind = iota // Variables
+	CaprefSymbol                   // Capture group references
+	DecoSymbol                     // Decorators
 
 	endSymbol
 )
 
-type symbol struct {
-	name    string      // Symbol name
-	kind    symtype     // Type
-	binding interface{} // Binding to storage allocated
-	loc     position    // Source file position
-	addr    int         // Address offset in another structure
+// Symbol describes a named program object.
+type Symbol struct {
+	Name    string      // identifier name
+	Kind    SymbolKind  // kind of program object
+	Type    Type        // object's type
+	Pos     *position   // Source file position of definition
+	Binding interface{} // binding to storage allocated in runtime
+	Addr    int         // Address offset in another structure, object specific
 }
 
-type scope struct {
-	parent *scope
-	symtab map[string][]*symbol
+// NewSymbol creates a record of a given symbol kind, named name, found at loc
+func NewSymbol(name string, kind SymbolKind, pos *position) (sym *Symbol) {
+	return &Symbol{name, kind, Undef, pos, nil, 0}
 }
 
-func (s *scope) lookupSym(name string, kind symtype) (*symbol, bool) {
-	r, ok := s.symtab[name]
-	if !ok && s.parent != nil {
-		return s.parent.lookupSym(name, kind)
-	} else if ok {
-		return r[kind], ok
+// Scope maintains a record of the identifiers declared in the current program
+// scope, and a link to the parent scope.
+type Scope struct {
+	Parent  *Scope
+	Symbols map[string]*Symbol
+}
+
+// NewScope creates a new scope within the parent scope
+func NewScope(parent *Scope) *Scope {
+	return &Scope{parent, make(map[string]*Symbol)}
+}
+
+// Insert attempts to insert a symbol into the scope.  If the scope already
+// contains an object alt with the same name, the scope is unchanged and the
+// function returns alt.  Otherwise the symbol is inserted, and returns nil.
+func (s *Scope) Insert(sym *Symbol) (alt *Symbol) {
+	if alt = s.Symbols[sym.Name]; alt == nil {
+		s.Symbols[sym.Name] = sym
 	}
-	return nil, ok
+	return
 }
 
-func (s *scope) addSym(name string, kind symtype, binding interface{}, loc position) *symbol {
-	sym := &symbol{name, kind, binding, loc, 0}
-	if _, ok := s.symtab[name]; !ok {
-		s.symtab[name] = make([]*symbol, endSymbol)
+// lookup returns the symbol with the given name if it is found in this or any
+// parent scope, otherwise nil.
+func (s *Scope) Lookup(name string) *Symbol {
+	for scope := s; scope != nil; scope = scope.Parent {
+		if sym := scope.Symbols[name]; sym != nil {
+			return sym
+		}
 	}
-	s.symtab[name][kind] = sym
-	return sym
+	return nil
+}
+
+// String prints the current scope and all parents to a string, recursing up to
+// the root scope.  This method is only used for debugging.
+func (s *Scope) String() string {
+	var buf bytes.Buffer
+	fmt.Fprintf(&buf, "scope %p {", s)
+	if s != nil {
+		fmt.Fprintln(&buf)
+		if len(s.Symbols) > 0 {
+			for _, sym := range s.Symbols {
+				fmt.Fprintf(&buf, "\t%#v %s\n", sym.Kind, sym.Name)
+			}
+		}
+		if s.Parent != nil {
+			fmt.Fprintf(&buf, "%s", s.Parent.String())
+		}
+	}
+	fmt.Fprintf(&buf, "}\n")
+	return buf.String()
 }

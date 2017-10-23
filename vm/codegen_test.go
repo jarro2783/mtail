@@ -4,20 +4,13 @@
 package vm
 
 import (
-	"fmt"
 	"strings"
 	"testing"
 
-	"github.com/google/mtail/metrics"
-	"github.com/kylelemons/godebug/pretty"
+	"github.com/go-test/deep"
 )
 
-// debug print for instructions
-func (i instr) String() string {
-	return fmt.Sprintf("{%s %d}", opNames[i.op], i.opnd)
-}
-
-var programs = []struct {
+var testCodeGenPrograms = []struct {
 	name   string
 	source string
 	prog   []instr // expected bytecode
@@ -52,7 +45,7 @@ var programs = []struct {
 			instr{jnm, 11},
 			instr{setmatched, false},
 			instr{push, 0},
-			instr{capref, 0},
+			instr{capref, 1},
 			instr{str, 0},
 			instr{strptime, 2},
 			instr{mload, 0},
@@ -77,24 +70,27 @@ var programs = []struct {
 			instr{setmatched, true}}},
 	{"inc by and set",
 		"counter foo\ncounter bar\n" +
-			"/(.*)/ {\n" +
+			"/([0-9]+)/ {\n" +
 			"foo += $1\n" +
 			"bar = $1\n" +
 			"}\n",
 		[]instr{
 			instr{match, 0},
-			instr{jnm, 14},
+			instr{jnm, 17},
 			instr{setmatched, false},
 			instr{mload, 0},
 			instr{dload, 0},
+			instr{mload, 0},
+			instr{dload, 0},
 			instr{push, 0},
-			instr{capref, 0},
-			instr{inc, 1},
+			instr{capref, 1},
+			instr{iadd, nil},
+			instr{iset, nil},
 			instr{mload, 1},
 			instr{dload, 0},
 			instr{push, 0},
-			instr{capref, 0},
-			instr{set, nil},
+			instr{capref, 1},
+			instr{iset, nil},
 			instr{setmatched, true}}},
 	{"cond expr gt",
 		"counter foo\n" +
@@ -198,7 +194,7 @@ var programs = []struct {
 			instr{jnm, 14},
 			instr{setmatched, false},
 			instr{push, 0},
-			instr{capref, 0},
+			instr{capref, 1},
 			instr{push, 1},
 			instr{cmp, 1},
 			instr{jm, 13},
@@ -211,14 +207,14 @@ var programs = []struct {
 	{"deco",
 		"counter foo\n" +
 			"counter bar\n" +
-			"def foo {\n" +
+			"def fooWrap {\n" +
 			"  /.*/ {\n" +
 			"    foo++\n" +
 			"    next\n" +
 			"  }\n" +
 			"}\n" +
 			"" +
-			"@foo { bar++\n }\n",
+			"@fooWrap { bar++\n }\n",
 		[]instr{
 			instr{match, 0},
 			instr{jnm, 10},
@@ -262,16 +258,20 @@ var programs = []struct {
 			instr{push, 20},
 			instr{shr, nil}}},
 	{"pow", `
-counter a
-counter b
-a ** b
+/(\d+) (\d+)/ {
+$1 ** $2
+}
 `,
 		[]instr{
-			instr{mload, 0},
-			instr{dload, 0},
-			instr{mload, 1},
-			instr{dload, 0},
-			instr{pow, nil}}},
+			instr{match, 0},
+			instr{jnm, 9},
+			instr{setmatched, false},
+			instr{push, 0},
+			instr{capref, 1},
+			instr{push, 0},
+			instr{capref, 2},
+			instr{ipow, nil},
+			instr{setmatched, true}}},
 	{"indexed expr", `
 counter a by b
 a["string"]++
@@ -338,22 +338,109 @@ counter bar
 		[]instr{
 			instr{push, 3},
 			instr{push, 1},
-			instr{mod, nil},
+			instr{imod, nil},
 		},
 	},
+	{"del", `
+counter a by b
+del a["string"]
+`,
+		[]instr{
+			instr{str, 0},
+			instr{mload, 0},
+			instr{del, 1}},
+	},
+	{"types", `
+gauge i
+gauge f
+/(\d+)/ {
+ i = $1
+}
+/(\d+\.\d+)/ {
+ f = $1
+}
+`,
+		[]instr{
+			instr{match, 0},
+			instr{jnm, 9},
+			instr{setmatched, false},
+			instr{mload, 0},
+			instr{dload, 0},
+			instr{push, 0},
+			instr{capref, 1},
+			instr{iset, nil},
+			instr{setmatched, true},
+			instr{match, 1},
+			instr{jnm, 18},
+			instr{setmatched, false},
+			instr{mload, 1},
+			instr{dload, 0},
+			instr{push, 1},
+			instr{capref, 1},
+			instr{fset, nil},
+			instr{setmatched, true},
+		},
+	},
+
+	{"getfilename", `
+getfilename()
+`,
+		[]instr{
+			instr{getfilename, nil},
+		},
+	},
+
+	{"dimensioned counter",
+		`counter c by a,b,c
+/(\d) (\d) (\d)/ {
+  c[$1,$2][$3]++
+}
+`,
+		[]instr{
+			instr{match, 0},
+			instr{jnm, 13},
+			instr{setmatched, false},
+			instr{push, 0},
+			instr{capref, 1},
+			instr{push, 0},
+			instr{capref, 2},
+			instr{push, 0},
+			instr{capref, 3},
+			instr{mload, 0},
+			instr{dload, 3},
+			instr{inc, nil},
+			instr{setmatched, true}}},
 }
 
-func TestCompile(t *testing.T) {
-	for _, tc := range programs {
-		m := metrics.NewStore()
-		v, err := Compile(tc.name, strings.NewReader(tc.source), m, false, true)
-		if err != nil {
-			t.Errorf("Compile errors: %q", err)
-			continue
-		}
-		diff := pretty.Compare(tc.prog, v.prog)
-		if len(diff) > 0 {
-			t.Errorf("%s: VM prog doesn't match.\n%s", tc.name, diff)
-		}
+func TestCodegen(t *testing.T) {
+	defaultCompareUnexportedFields := deep.CompareUnexportedFields
+	deep.CompareUnexportedFields = true
+	defer func() { deep.CompareUnexportedFields = defaultCompareUnexportedFields }()
+
+	for _, tc := range testCodeGenPrograms {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			ast, err := Parse(tc.name, strings.NewReader(tc.source))
+			if err != nil {
+				t.Fatalf("Parse error: %s", err)
+			}
+			err = Check(ast)
+			if err != nil {
+				t.Fatalf("Check error: %s", err)
+			}
+			obj, err := CodeGen(tc.name, ast)
+			if err != nil {
+				t.Errorf("Compile errors:\n%s", err)
+				s := Sexp{}
+				s.emitTypes = true
+				t.Fatalf("AST:\n%s", s.Dump(ast))
+			}
+
+			if diff := deep.Equal(tc.prog, obj.prog); diff != nil {
+				t.Error(diff)
+				t.Logf("Expected:\n%s\nReceived:\n%s", tc.prog, obj.prog)
+			}
+		})
 	}
 }
