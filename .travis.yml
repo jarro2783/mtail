@@ -2,6 +2,7 @@ language: go
 go_import_path: github.com/google/mtail
 before_install:
   - go get github.com/laher/goxc
+  - go get github.com/go-test/deep
 go:
   - tip
 script: make && go test
